@@ -1,0 +1,17 @@
+{
+  "name": "hangman-api",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "ts-node-dev src/index.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@types/mongoose": "^5.11.97",
+    "mongoose": "^8.4.4",
+    "mysql2": "^3.10.1"
+  }
+}

@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Juego de Ahorcado</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0f0f0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .container {
+            text-align: center;
+        }
+        .word {
+            font-size: 2em;
+            background-color: #09bbda;
+            box-shadow: 0 0 20px rgba(104, 251, 5, 0.1);
+            display: inline-block;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            padding: 10px;
+        }
+        .input {
+            font-size: 1.5em;
+            margin-top: 10px;
+        }
+        .alert {
+            background-color: yellow;
+            border: 1px solid black;
+            padding: 10px;
+            margin: 10px 0;
+        }
+        #gameView, #wordEntryView {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="alerts"></div>
+
+        <div id="wordEntryView">
+            <h1>Ingresar Palabra</h1>
+            <input type="text" id="wordInput" class="input" placeholder="Ingresa una palabra" />
+            <input type="text" id="hintInput" class="input" placeholder="Ingresa una pista" />
+            <button onclick="startGame()">Iniciar Juego</button>
+        </div>
+
+        <div id="gameView">
+            <h1>Juego de Ahorcado</h1>
+            <div class="word" id="gameState">Cargando...</div>
+            <input type="text" id="guessInput" class="input" maxlength="1" />
+            <button onclick="makeGuess()">Adivinar</button>
+        </div>
+    </div>
+
+    <script>
+        let isConnected = false;
+
+        function showAlert(message) {
+            const alertsDiv = document.getElementById('alerts');
+            const alert = document.createElement('div');
+            alert.textContent = message;
+            alert.className = 'alert';
+            alertsDiv.appendChild(alert);
+            console.log(message); // Mostrar mensaje en la consola
+            setTimeout(() => {
+                alertsDiv.removeChild(alert);
+            }, 5000);
+        }
+
+        function switchView(view) {
+            document.getElementById('wordEntryView').style.display = view === 'wordEntry' ? 'block' : 'none';
+            document.getElementById('gameView').style.display = view === 'game' ? 'block' : 'none';
+        }
+
+        function startGame() {
+            const wordInput = document.getElementById('wordInput').value.trim().toLowerCase();
+            const hintInput = document.getElementById('hintInput').value.trim();
+
+            if (!wordInput || !hintInput) {
+                showAlert('Por favor ingresa una palabra y una pista.');
+                return;
+            }
+
+            fetch('http://localhost:8080/set-word', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ word: wordInput, hint: hintInput })
+            })
+            .then(response => response.json())
+            .then(data => {
+                showAlert(data.message);
+                if (data.success) {
+                    switchView('game');
+                    connect();
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showAlert('Error al iniciar el juego.');
+            });
+        }
+
+        function connect() {
+            const gameStateElement = document.getElementById('gameState');
+            const eventSource = new EventSource('http://localhost:8080/game-events');
+
+            eventSource.onopen = function() {
+                const message = 'Conexión establecida.';
+                showAlert(message);
+                isConnected = true;
+            };
+
+            eventSource.onmessage = function(event) {
+                const gameState = JSON.parse(event.data);
+                if (gameState && gameState.word && Array.isArray(gameState.guesses)) {
+                    const wordDisplay = gameState.word.split('').map(letter => gameState.guesses.includes(letter) ? letter : '_').join(' ');
+                    gameStateElement.innerHTML = `<div>Intentos restantes: ${gameState.attemptsLeft}</div><div>${wordDisplay}</div><div>${gameState.message || ''}</div>`;
+                    if (gameState.message === "¡Felicidades! Has adivinado la palabra." || gameState.message.includes("¡Perdiste!")) {
+                        showAlert(gameState.message);
+                    }
+                } else {
+                    console.error('Error: gameState o sus propiedades no están definidos correctamente.');
+                }
+            };
+
+            eventSource.onerror = function() {
+                const message = 'Conexión perdida. Intentando reconectar...';
+                showAlert(message);
+                isConnected = false;
+                gameStateElement.textContent = 'Error al cargar el estado del juego';
+                eventSource.close();
+                setTimeout(() => {
+                    connect();
+                }, 1000); // Intenta reconectar después de 1 segundo
+            };
+        }
+
+        document.addEventListener("DOMContentLoaded", () => {
+            switchView('wordEntry');
+        });
+
+        function makeGuess() {
+            const guessInput = document.getElementById('guessInput');
+            const letter = guessInput.value.trim();
+            guessInput.value = '';
+
+            fetch('http://localhost:8080/guess', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ letter })
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log(data.message); // Mostrar mensaje en la consola
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showAlert('Error al enviar la adivinanza.');
+            });
+        }
+    </script>
+</body>
+</html>
